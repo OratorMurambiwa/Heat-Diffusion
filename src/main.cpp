@@ -1,8 +1,10 @@
 #include <iostream>
+#include <string>
 #include <mpi.h>
 #include "config.hpp"
 #include "grid3d.hpp"
 #include "solver.hpp"
+#include "vtk_writer.hpp"
 
 int main(int argc, char** argv) {
     // Initialize MPI
@@ -35,6 +37,12 @@ int main(int argc, char** argv) {
 
         // Swap buffers (O(1) pointer swap)
         grid_current.data.swap(grid_next.data);
+
+        // Export data for ParaView every 100 steps
+        if (step % 100 == 0) {
+            std::string filename = "output_step_" + std::to_string(step) + ".vtk";
+            VTKWriter::write(grid_current, filename);
+        }
 
         if (rank == 0 && step % 100 == 0) {
             std::cout << "Step " << step << " / " << Config::TOTAL_STEPS << " complete." << std::endl;
