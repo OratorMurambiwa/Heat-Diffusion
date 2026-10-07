@@ -1,0 +1,15 @@
+# CMake build directory and cache files
+build/
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+
+# Compiled executable binaries
+simulator
+
+# Simulation data outputs
+*.vtk
+
+# OS hidden files
+.DS_Store
