@@ -26,9 +26,22 @@ namespace Config {
         DIFFUSION_SUM <= 0.5,
         "Unstable explicit diffusion timestep"
     );
-    
+
     constexpr int TOTAL_STEPS = 1000;
 
     constexpr double LASER_POWER = 200.0;
+
+    // Demonstration values; calibrate for the actual material and process.
+    constexpr double ABSORPTIVITY = 0.35;
+    constexpr double LASER_RADIUS = 50e-6; // Gaussian spot radius in metres
+    constexpr double SCAN_SPEED = 0.8;    // Metres per second
+
+    static_assert(
+        LASER_RADIUS > 0.0 &&
+        ABSORPTIVITY >= 0.0 &&
+        ABSORPTIVITY <= 1.0,
+        "Invalid laser parameters"
+    );
+    
     constexpr double AMBIENT_TEMP = 293.15;
 }
