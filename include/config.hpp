@@ -14,7 +14,19 @@ namespace Config {
     constexpr int NY_GLOBAL = 200;
     constexpr int NZ_GLOBAL = 50;
 
-    constexpr double DT = 1e-5;
+    constexpr double DT = 1e-6;
+
+    constexpr double DIFFUSION_SUM =
+        ALPHA * DT *
+        (1.0 / (DX * DX) +
+        1.0 / (DY * DY) +
+        1.0 / (DZ * DZ));
+
+    static_assert(
+        DIFFUSION_SUM <= 0.5,
+        "Unstable explicit diffusion timestep"
+    );
+    
     constexpr int TOTAL_STEPS = 1000;
 
     constexpr double LASER_POWER = 200.0;
