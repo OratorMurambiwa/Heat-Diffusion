@@ -39,6 +39,11 @@ int main(int argc, char** argv) {
         ++nz_local;
     }
 
+    // Global starting Z index of this rank's real layers.
+    const int z_offset =
+        rank * (Config::NZ_GLOBAL / size)
+        + (rank < remainder ? rank : remainder);
+
     // One ghost layer on each side of the local slab.
     const int nz_with_ghosts = nz_local + 2;
 
@@ -86,7 +91,7 @@ int main(int argc, char** argv) {
                 "output_step_" + std::to_string(step)
                 + "_rank_" + std::to_string(rank) + ".vtk";
 
-            VTKWriter::write(grid_current, filename);
+            VTKWriter::write(grid_current, filename, z_offset);
         }
 
         if (rank == 0 && step % 100 == 0) {
