@@ -1,11 +1,10 @@
 cmake_minimum_required(VERSION 3.10)
 project(Heat-Diffusion CXX)
 
-# Enforce modern C++ standards
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Apply aggressive HPC performance optimizations
+# Apply HPC performance optimizations
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native -Wall")
 
 # Find required parallel libraries
