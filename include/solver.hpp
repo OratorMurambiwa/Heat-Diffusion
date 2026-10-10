@@ -7,5 +7,5 @@ public:
     static void compute_diffusion(const Grid3D& current, Grid3D& next);
 
     // Injects laser heat into top powder bed layer
-    static void apply_laser(Grid3D& grid, int laser_x, int laser_y);
+    static void apply_laser(Grid3D& grid, double laser_x, double laser_y);
 };
