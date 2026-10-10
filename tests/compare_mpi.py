@@ -34,7 +34,7 @@ def read_vtk(path):
            (dimensions, origin, spacing, point_count)):
         raise ValueError(f"Incomplete VTK header: {path}")
 
-    expected_count = math.prod(dimensions)
+    expected_count = dimensions[0]  * dimensions[1] * dimensions[2]
     if len(values) != expected_count or point_count != expected_count:
         raise ValueError(f"Incorrect data count: {path}")
 
