@@ -48,3 +48,24 @@ if(BUILD_TESTING)
         ENVIRONMENT "OMP_NUM_THREADS=2"
     )
 endif()
+
+
+# Enable automated testing
+enable_testing()
+
+# Build the existing numerical validation tests
+add_executable(solver_validation
+    tests/solver_validation.cpp
+    src/grid3d.cpp
+    src/solver.cpp
+)
+
+target_link_libraries(solver_validation
+    PRIVATE OpenMP::OpenMP_CXX
+)
+
+# Register the test with CTest
+add_test(
+    NAME solver_validation
+    COMMAND solver_validation
+)
