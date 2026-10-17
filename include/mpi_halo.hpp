@@ -1,8 +1,19 @@
+
 #pragma once
 #include "grid3d.hpp"
 
+enum class HaloPrecision {
+    FP64,
+    FP32
+};
+
 class MPIHalo {
 public:
-    // Swaps ghost cell layers with neighboring MPI ranks
-    static void exchange(Grid3D& grid, int rank, int size);
+    static void exchange(
+        Grid3D& grid,
+        int rank,
+        int size,
+        HaloPrecision precision = HaloPrecision::FP64
+    );
 };
+
