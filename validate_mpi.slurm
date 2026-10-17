@@ -18,7 +18,7 @@ export OMP_PROC_BIND=close
 
 cd "$SLURM_SUBMIT_DIR"
 
-simulator="$SLURM_SUBMIT_DIR/build/simulator"
+simulator="$SLURM_SUBMIT_DIR/build-research/simulator"
 results_dir="$SLURM_SUBMIT_DIR/mpi_validation_$SLURM_JOB_ID"
 
 mkdir -p "$results_dir/serial" "$results_dir/parallel"
