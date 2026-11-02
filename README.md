@@ -1,3 +1,7 @@
-## Project Overview
+## Overview
 
-This project investigates how GPU acceleration, memory optimization, and efficient inter-GPU communication can improve the performance of large-scale 3D heat-diffusion simulations without compromising numerical accuracy. Building on an existing C++ MPI/OpenMP solver, the project extends the simulation to NVIDIA GPUs using CUDA C++, systematically evaluates kernel optimizations through performance benchmarking and Nsight profiling, and explores multi-GPU scaling using CUDA-aware MPI. A key research objective is to determine whether overlapping computation with communication and reducing halo-exchange precision can lower execution time while maintaining acceptable numerical error. The overall goal is to develop a validated, high-performance distributed solver and quantify the trade-offs between computational speed, communication overhead, and numerical accuracy.
+**Project Description:** A high-performance computing research project focused on optimizing a 3D heat-diffusion solver using C++, CUDA, MPI, and OpenMP. Experiments on NERSC Perlmutter investigate GPU acceleration, memory optimization, and distributed computing performance.
+
+**Research Question:** How can CUDA kernel optimization and communication–computation overlap improve the performance and scalability of a distributed heat-diffusion solver while preserving numerical accuracy?
+
+**Research Goal:** Develop and evaluate an optimized GPU-accelerated solver by measuring execution time, memory efficiency, multi-GPU scalability, and numerical error against a validated CPU baseline.
