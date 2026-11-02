@@ -27,21 +27,30 @@ struct Event {
 };
 }
 
-GpuMeasurements measure_gpu(const Grid3D& initial, const Grid3D& cpu_reference,
-                            int iterations, int warmup, int repeats) {
-    GpuMeasurements result;
+std::vector<GpuMeasurements> measure_gpu(const Grid3D& initial, const Grid3D& cpu_reference,
+                            int iterations, int warmup, int repeats,
+                            const std::vector<GpuInitialization>& modes) {
+    if (modes.empty() || modes.size() > 2 ||
+        (modes.size() == 2 && modes[0] == modes[1]))
+        throw std::runtime_error("Expected one or two distinct GPU initialization modes");
+    GpuMeasurements metadata;
     int device = 0;
     check(cudaGetDevice(&device), "cudaGetDevice");
     cudaDeviceProp properties{};
     check(cudaGetDeviceProperties(&properties, device), "cudaGetDeviceProperties");
-    result.device = properties.name;
-    result.compute_major = properties.major; result.compute_minor = properties.minor;
-    result.global_memory_bytes = properties.totalGlobalMem;
+    metadata.device = properties.name;
+    metadata.compute_major = properties.major; metadata.compute_minor = properties.minor;
+    metadata.global_memory_bytes = properties.totalGlobalMem;
     char bus[32]{};
     check(cudaDeviceGetPCIBusId(bus, sizeof(bus), device), "cudaDeviceGetPCIBusId");
-    result.pci_bus_id = bus;
-    check(cudaRuntimeGetVersion(&result.runtime_version), "cudaRuntimeGetVersion");
-    check(cudaDriverGetVersion(&result.driver_version), "cudaDriverGetVersion");
+    metadata.pci_bus_id = bus;
+    check(cudaRuntimeGetVersion(&metadata.runtime_version), "cudaRuntimeGetVersion");
+    check(cudaDriverGetVersion(&metadata.driver_version), "cudaDriverGetVersion");
+    std::vector<GpuMeasurements> results;
+    for (auto mode : modes) {
+        results.push_back(metadata);
+        results.back().initialization = mode;
+    }
 
     const size_t bytes = initial.data.size() * sizeof(double);
     const size_t cells = static_cast<size_t>(initial.nx - 2) * (initial.ny - 2) * (initial.nz - 2);
@@ -57,10 +66,15 @@ GpuMeasurements measure_gpu(const Grid3D& initial, const Grid3D& cpu_reference,
     const double cx = Config::ALPHA * Config::DT / (Config::DX * Config::DX);
     const double cy = Config::ALPHA * Config::DT / (Config::DY * Config::DY);
     const double cz = Config::ALPHA * Config::DT / (Config::DZ * Config::DZ);
-    auto upload = [&] {
+    auto upload = [&](GpuInitialization mode) {
         current = first.data; next = second.data;
         check(cudaMemcpy(current, initial.data.data(), bytes, cudaMemcpyHostToDevice), "first H2D");
-        check(cudaMemcpy(next, initial.data.data(), bytes, cudaMemcpyHostToDevice), "second H2D");
+        if (mode == GpuInitialization::TwoHostCopies) {
+            check(cudaMemcpy(next, initial.data.data(), bytes, cudaMemcpyHostToDevice), "second H2D");
+        } else {
+            // Copy the full initialized field, including all six boundary planes.
+            check(cudaMemcpy(next, current, bytes, cudaMemcpyDeviceToDevice), "second buffer D2D");
+        }
     };
     auto advance = [&](int steps) {
         for (int step = 0; step < steps; ++step) {
@@ -70,8 +84,8 @@ GpuMeasurements measure_gpu(const Grid3D& initial, const Grid3D& cpu_reference,
             std::swap(current, next);
         }
     };
-    auto warm = [&] {
-        upload(); advance(warmup);
+    auto warm = [&](GpuInitialization mode) {
+        upload(mode); advance(warmup);
         check(cudaDeviceSynchronize(), "warmup synchronization");
     };
     auto download = [&] {
@@ -79,30 +93,37 @@ GpuMeasurements measure_gpu(const Grid3D& initial, const Grid3D& cpu_reference,
     };
     using Clock = std::chrono::steady_clock;
     for (int repeat = 0; repeat < repeats; ++repeat) {
-        warm();
-        upload();
-        // Finish uploads before starting device-only timing (pageable host data).
-        check(cudaDeviceSynchronize(), "pre-timing synchronization");
-        check(cudaEventRecord(start.event), "start event record");
-        advance(iterations);
-        check(cudaEventRecord(stop.event), "stop event record");
-        check(cudaEventSynchronize(stop.event), "stop event synchronization");
-        float milliseconds = 0.0f;
-        check(cudaEventElapsedTime(&milliseconds, start.event, stop.event), "event elapsed time");
-        result.kernel_seconds.push_back(milliseconds / 1000.0);
-        download();
-        result.kernel_error = std::max(result.kernel_error, Comparison::check_gpu(initial, cpu_reference, output));
+        // Reverse paired order on odd repeats to reduce consistent ordering bias.
+        // Single-mode runs retain the original baseline measurement sequence.
+        for (size_t slot = 0; slot < results.size(); ++slot) {
+            const size_t index = repeat % 2 == 0 ? slot : results.size() - 1 - slot;
+            auto& result = results[index];
+            const auto mode = result.initialization;
+            warm(mode);
+            upload(mode);
+            // Finish uploads before starting device-only timing (pageable host data).
+            check(cudaDeviceSynchronize(), "pre-timing synchronization");
+            check(cudaEventRecord(start.event), "start event record");
+            advance(iterations);
+            check(cudaEventRecord(stop.event), "stop event record");
+            check(cudaEventSynchronize(stop.event), "stop event synchronization");
+            float milliseconds = 0.0f;
+            check(cudaEventElapsedTime(&milliseconds, start.event, stop.event), "event elapsed time");
+            result.kernel_seconds.push_back(milliseconds / 1000.0);
+            download();
+            result.kernel_error = std::max(result.kernel_error, Comparison::check_gpu(initial, cpu_reference, output));
 
-        warm();
-        const auto begin = Clock::now();
-        upload();
-        advance(iterations);
-        check(cudaDeviceSynchronize(), "end-to-end synchronization");
-        download();
-        const auto end = Clock::now();
-        result.end_to_end_seconds.push_back(std::chrono::duration<double>(end - begin).count());
-        result.end_to_end_error = std::max(result.end_to_end_error, Comparison::check_gpu(initial, cpu_reference, output));
+            warm(mode);
+            const auto begin = Clock::now();
+            upload(mode);
+            advance(iterations);
+            check(cudaDeviceSynchronize(), "end-to-end synchronization");
+            download();
+            const auto end = Clock::now();
+            result.end_to_end_seconds.push_back(std::chrono::duration<double>(end - begin).count());
+            result.end_to_end_error = std::max(result.end_to_end_error, Comparison::check_gpu(initial, cpu_reference, output));
+        }
     }
     first.release(); second.release(); start.release(); stop.release();
-    return result;
+    return results;
 }
