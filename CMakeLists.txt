@@ -63,3 +63,35 @@ set(CPU_BENCHMARK_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${CPU_BENCHMARK_CO
 configure_file(benchmarks/cpu_benchmark_build.hpp.in
     generated/cpu_benchmark_build.hpp @ONLY)
 target_include_directories(cpu_stencil_benchmark PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+
+# Keep CUDA entirely opt-in so CPU-only configurations need no CUDA toolkit.
+option(ENABLE_CUDA "Build the standalone FP64 CUDA stencil and validation" OFF)
+if(ENABLE_CUDA)
+    if(CMAKE_VERSION VERSION_LESS 3.18)
+        message(FATAL_ERROR "ENABLE_CUDA requires CMake 3.18 or newer")
+    endif()
+    cmake_policy(SET CMP0104 NEW)
+    include(CheckLanguage)
+    check_language(CUDA)
+    if(NOT CMAKE_CUDA_COMPILER)
+        message(FATAL_ERROR "ENABLE_CUDA=ON requires a CUDA compiler; load the CUDA toolkit or use ENABLE_CUDA=OFF")
+    endif()
+    enable_language(CUDA)
+
+    add_library(cuda_stencil STATIC src/cuda_solver.cu src/grid3d.cpp)
+    target_include_directories(cuda_stencil PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    set_target_properties(cuda_stencil PROPERTIES
+        CUDA_STANDARD 17
+        CUDA_STANDARD_REQUIRED ON
+    )
+
+    if(BUILD_TESTING)
+        add_executable(cuda_solver_validation tests/cuda_solver_validation.cpp src/solver.cpp)
+        target_link_libraries(cuda_solver_validation PRIVATE cuda_stencil OpenMP::OpenMP_CXX)
+        add_test(NAME cuda_solver_validation COMMAND cuda_solver_validation)
+        set_tests_properties(cuda_solver_validation PROPERTIES
+            ENVIRONMENT "OMP_NUM_THREADS=2"
+            LABELS "cuda"
+        )
+    endif()
+endif()
