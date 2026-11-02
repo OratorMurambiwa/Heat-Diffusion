@@ -49,23 +49,17 @@ if(BUILD_TESTING)
     )
 endif()
 
-
-# Enable automated testing
-enable_testing()
-
-# Build the existing numerical validation tests
-add_executable(solver_validation
-    tests/solver_validation.cpp
+# Standalone CPU stencil benchmark (no MPI communication or output).
+add_executable(cpu_stencil_benchmark
+    benchmarks/cpu_stencil.cpp
     src/grid3d.cpp
     src/solver.cpp
 )
+target_link_libraries(cpu_stencil_benchmark PRIVATE OpenMP::OpenMP_CXX)
 
-target_link_libraries(solver_validation
-    PRIVATE OpenMP::OpenMP_CXX
-)
-
-# Register the test with CTest
-add_test(
-    NAME solver_validation
-    COMMAND solver_validation
-)
+# Capture the benchmark compile configuration for CSV reproducibility.
+string(TOUPPER "${CMAKE_BUILD_TYPE}" CPU_BENCHMARK_CONFIG)
+set(CPU_BENCHMARK_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${CPU_BENCHMARK_CONFIG}} -std=gnu++${CMAKE_CXX_STANDARD} ${OpenMP_CXX_FLAGS}")
+configure_file(benchmarks/cpu_benchmark_build.hpp.in
+    generated/cpu_benchmark_build.hpp @ONLY)
+target_include_directories(cpu_stencil_benchmark PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
