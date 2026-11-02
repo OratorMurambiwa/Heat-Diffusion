@@ -1,6 +1,7 @@
 #include "cuda_timing.hpp"
 #include "comparison_common.hpp"
 #include "cuda_stencil_kernel.cuh"
+#include "cuda_z_register_kernel.cuh"
 #include <chrono>
 #include <utility>
 
@@ -29,10 +30,14 @@ struct Event {
 
 std::vector<GpuMeasurements> measure_gpu(const Grid3D& initial, const Grid3D& cpu_reference,
                             int iterations, int warmup, int repeats,
-                            const std::vector<GpuInitialization>& modes) {
+                            const std::vector<GpuInitialization>& modes,
+                            const std::vector<GpuKernel>& kernels) {
     if (modes.empty() || modes.size() > 2 ||
         (modes.size() == 2 && modes[0] == modes[1]))
         throw std::runtime_error("Expected one or two distinct GPU initialization modes");
+    if (kernels.empty() || kernels.size() > 2 ||
+        (kernels.size() == 2 && kernels[0] == kernels[1]))
+        throw std::runtime_error("Expected one or two distinct GPU kernels");
     GpuMeasurements metadata;
     int device = 0;
     check(cudaGetDevice(&device), "cudaGetDevice");
@@ -48,16 +53,24 @@ std::vector<GpuMeasurements> measure_gpu(const Grid3D& initial, const Grid3D& cp
     check(cudaDriverGetVersion(&metadata.driver_version), "cudaDriverGetVersion");
     std::vector<GpuMeasurements> results;
     for (auto mode : modes) {
-        results.push_back(metadata);
-        results.back().initialization = mode;
+        for (auto kernel : kernels) {
+            results.push_back(metadata);
+            results.back().initialization = mode;
+            results.back().kernel = kernel;
+        }
     }
 
     const size_t bytes = initial.data.size() * sizeof(double);
-    const size_t cells = static_cast<size_t>(initial.nx - 2) * (initial.ny - 2) * (initial.nz - 2);
+    const size_t columns = static_cast<size_t>(initial.nx - 2) * (initial.ny - 2);
+    const size_t cells = columns * (initial.nz - 2);
     constexpr unsigned int threads = 256;
     const size_t blocks = (cells + threads - 1) / threads;
-    if (blocks > static_cast<size_t>(properties.maxGridSize[0]))
-        throw std::runtime_error("Grid exceeds CUDA launch limit");
+    const size_t column_blocks = (columns + threads - 1) / threads;
+    for (auto kernel : kernels) {
+        const size_t count = kernel == GpuKernel::Naive ? blocks : column_blocks;
+        if (count > static_cast<size_t>(properties.maxGridSize[0]))
+            throw std::runtime_error("Grid exceeds CUDA launch limit");
+    }
     Buffer first(bytes), second(bytes);
     Event start, stop;
     Grid3D output = initial;
@@ -76,16 +89,21 @@ std::vector<GpuMeasurements> measure_gpu(const Grid3D& initial, const Grid3D& cp
             check(cudaMemcpy(next, current, bytes, cudaMemcpyDeviceToDevice), "second buffer D2D");
         }
     };
-    auto advance = [&](int steps) {
+    auto advance = [&](int steps, GpuKernel kernel) {
         for (int step = 0; step < steps; ++step) {
-            diffusion<<<static_cast<unsigned int>(blocks), threads>>>(
-                current, next, initial.nx, initial.ny, cells, cx, cy, cz);
+            if (kernel == GpuKernel::Naive) {
+                diffusion<<<static_cast<unsigned int>(blocks), threads>>>(
+                    current, next, initial.nx, initial.ny, cells, cx, cy, cz);
+            } else {
+                diffusion_z_register<<<static_cast<unsigned int>(column_blocks), threads>>>(
+                    current, next, initial.nx, initial.ny, initial.nz, columns, cx, cy, cz);
+            }
             check(cudaGetLastError(), "diffusion launch");
             std::swap(current, next);
         }
     };
-    auto warm = [&](GpuInitialization mode) {
-        upload(mode); advance(warmup);
+    auto warm = [&](GpuInitialization mode, GpuKernel kernel) {
+        upload(mode); advance(warmup, kernel);
         check(cudaDeviceSynchronize(), "warmup synchronization");
     };
     auto download = [&] {
@@ -99,12 +117,13 @@ std::vector<GpuMeasurements> measure_gpu(const Grid3D& initial, const Grid3D& cp
             const size_t index = repeat % 2 == 0 ? slot : results.size() - 1 - slot;
             auto& result = results[index];
             const auto mode = result.initialization;
-            warm(mode);
+            const auto kernel = result.kernel;
+            warm(mode, kernel);
             upload(mode);
             // Finish uploads before starting device-only timing (pageable host data).
             check(cudaDeviceSynchronize(), "pre-timing synchronization");
             check(cudaEventRecord(start.event), "start event record");
-            advance(iterations);
+            advance(iterations, kernel);
             check(cudaEventRecord(stop.event), "stop event record");
             check(cudaEventSynchronize(stop.event), "stop event synchronization");
             float milliseconds = 0.0f;
@@ -113,10 +132,10 @@ std::vector<GpuMeasurements> measure_gpu(const Grid3D& initial, const Grid3D& cp
             download();
             result.kernel_error = std::max(result.kernel_error, Comparison::check_gpu(initial, cpu_reference, output));
 
-            warm(mode);
+            warm(mode, kernel);
             const auto begin = Clock::now();
             upload(mode);
-            advance(iterations);
+            advance(iterations, kernel);
             check(cudaDeviceSynchronize(), "end-to-end synchronization");
             download();
             const auto end = Clock::now();
