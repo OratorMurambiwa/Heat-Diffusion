@@ -4,7 +4,7 @@
 #SBATCH --qos=shared
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=32
 #SBATCH --gpus-per-task=1
 #SBATCH --time=00:20:00
 #SBATCH --output=heat-cpu-cuda-%j.out
@@ -31,15 +31,15 @@ module -t list > "$results_dir/modules.txt" 2>&1
 git rev-parse HEAD > "$results_dir/revision.txt"
 git status --short > "$results_dir/worktree-status.txt"
 cp "$build_dir/CMakeCache.txt" "$results_dir/CMakeCache.txt"
-srun --ntasks=1 --cpus-per-task=16 --gpus-per-task=1 \
+srun --ntasks=1 --cpus-per-task=32 --gpus-per-task=1 \
     nvidia-smi > "$results_dir/nvidia-smi.txt"
-srun --ntasks=1 --cpus-per-task=16 --gpus-per-task=1 \
+srun --ntasks=1 --cpus-per-task=32 --gpus-per-task=1 \
     lscpu > "$results_dir/lscpu.txt"
 
 # A validation failure prevents benchmark execution.
-srun --ntasks=1 --cpus-per-task=16 --gpus-per-task=1 \
+srun --ntasks=1 --cpus-per-task=32 --gpus-per-task=1 \
     ctest --test-dir "$build_dir" --output-on-failure -V
-srun --ntasks=1 --cpus-per-task=16 --gpus-per-task=1 \
+srun --ntasks=1 --cpus-per-task=32 --gpus-per-task=1 \
     "$build_dir/cpu_cuda_benchmark" --threads "$OMP_NUM_THREADS" \
     --iterations 100 --warmup 10 --repeats 9 --csv "$results_dir/comparison.csv"
 echo "Results: $results_dir"

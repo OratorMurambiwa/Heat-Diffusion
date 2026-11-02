@@ -97,7 +97,7 @@ sbatch --account=YOUR_GPU_ACCOUNT benchmarks/run_perlmutter.slurm
 ```
 
 Architecture 80 targets Perlmutter A100 GPUs. The script requests one GPU and
-16 logical CPU slots, uses 8 OpenMP threads with `OMP_PLACES=cores` and
+32 Slurm CPUs per GPU, uses 8 OpenMP threads with `OMP_PLACES=cores` and
 `OMP_PROC_BIND=close`, runs the existing CTest suite before benchmarking, and
 places CSV/provenance under `$SCRATCH/heat-diffusion-benchmarks/$SLURM_JOB_ID/`.
 The comparison program rejects an OpenMP team smaller than requested. A different
@@ -109,7 +109,7 @@ Within an existing GPU allocation, one can instead run:
 
 ```sh
 export OMP_PLACES=cores OMP_PROC_BIND=close
-srun -n 1 -c 16 --gpus-per-task=1 \
+srun -n 1 -c 32 --gpus-per-task=1 \
   build-cuda/cpu_cuda_benchmark --threads 8 \
   --iterations 100 --warmup 10 --repeats 9 --csv "$SCRATCH/comparison.csv"
 ```
@@ -138,3 +138,5 @@ Perlmutter GPU run (or another compatible CUDA machine).
 References: [NERSC CUDA modules](https://docs.nersc.gov/development/programming-models/cuda/),
 [Perlmutter GPU jobs](https://docs.nersc.gov/systems/perlmutter/running-jobs/),
 [CUDA event timing](https://developer.nvidia.com/blog/how-implement-performance-metrics-cuda-cc/).
+
+For a separate short Nsight Systems capture, see [Phase 4 profiling](gpu_profiling.md).
