@@ -64,6 +64,12 @@ configure_file(benchmarks/cpu_benchmark_build.hpp.in
     generated/cpu_benchmark_build.hpp @ONLY)
 target_include_directories(cpu_stencil_benchmark PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
+# Same-process CPU/GPU comparison; --cpu-only also works without a toolkit.
+add_executable(cpu_cuda_benchmark
+    benchmarks/cpu_cuda_benchmark.cpp src/grid3d.cpp src/solver.cpp)
+target_link_libraries(cpu_cuda_benchmark PRIVATE OpenMP::OpenMP_CXX)
+target_include_directories(cpu_cuda_benchmark PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+
 # Keep CUDA entirely opt-in so CPU-only configurations need no CUDA toolkit.
 option(ENABLE_CUDA "Build the standalone FP64 CUDA stencil and validation" OFF)
 if(ENABLE_CUDA)
@@ -77,6 +83,11 @@ if(ENABLE_CUDA)
         message(FATAL_ERROR "ENABLE_CUDA=ON requires a CUDA compiler; load the CUDA toolkit or use ENABLE_CUDA=OFF")
     endif()
     enable_language(CUDA)
+
+    target_sources(cpu_cuda_benchmark PRIVATE benchmarks/cuda_timing.cu)
+    target_include_directories(cpu_cuda_benchmark PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_definitions(cpu_cuda_benchmark PRIVATE HEAT_BENCH_HAS_CUDA=1)
+    set_target_properties(cpu_cuda_benchmark PROPERTIES CUDA_STANDARD 17 CUDA_STANDARD_REQUIRED ON)
 
     add_library(cuda_stencil STATIC src/cuda_solver.cu src/grid3d.cpp)
     target_include_directories(cuda_stencil PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
@@ -95,3 +106,6 @@ if(ENABLE_CUDA)
         )
     endif()
 endif()
+
+set(COMPARISON_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} ${CMAKE_CUDA_FLAGS_${CPU_BENCHMARK_CONFIG}} -std=c++17")
+configure_file(benchmarks/comparison_build.hpp.in generated/comparison_build.hpp @ONLY)

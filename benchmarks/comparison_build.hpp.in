@@ -1,0 +1,8 @@
+#pragma once
+constexpr const char* comparison_build_type = R"meta(@CMAKE_BUILD_TYPE@)meta";
+constexpr const char* comparison_cxx = R"meta(@CMAKE_CXX_COMPILER_ID@ @CMAKE_CXX_COMPILER_VERSION@ @CMAKE_CXX_COMPILER@)meta";
+constexpr const char* comparison_cxx_flags = R"meta(@CPU_BENCHMARK_FLAGS@)meta";
+constexpr const char* comparison_cuda = R"meta(@CMAKE_CUDA_COMPILER_ID@ @CMAKE_CUDA_COMPILER_VERSION@ @CMAKE_CUDA_COMPILER@)meta";
+constexpr const char* comparison_cuda_flags = R"meta(@COMPARISON_CUDA_FLAGS@)meta";
+constexpr const char* comparison_cuda_host = R"meta(@CMAKE_CUDA_HOST_COMPILER@)meta";
+constexpr const char* comparison_cuda_arch = R"meta(@CMAKE_CUDA_ARCHITECTURES@)meta";
