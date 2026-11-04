@@ -2,6 +2,7 @@
 #include "comparison_common.hpp"
 #include "cuda_stencil_kernel.cuh"
 #include "cuda_z_register_kernel.cuh"
+#include "cuda_z_bounded_kernel.cuh"
 #include <chrono>
 #include <utility>
 
@@ -35,9 +36,13 @@ std::vector<GpuMeasurements> measure_gpu(const Grid3D& initial, const Grid3D& cp
     if (modes.empty() || modes.size() > 2 ||
         (modes.size() == 2 && modes[0] == modes[1]))
         throw std::runtime_error("Expected one or two distinct GPU initialization modes");
-    if (kernels.empty() || kernels.size() > 2 ||
-        (kernels.size() == 2 && kernels[0] == kernels[1]))
-        throw std::runtime_error("Expected one or two distinct GPU kernels");
+    if (kernels.empty() || kernels.size() > 5)
+        throw std::runtime_error("Expected one to five distinct GPU kernels");
+    for (size_t i = 0; i < kernels.size(); ++i) {
+        kernel_name(kernels[i]); // Reject invalid enum values before allocating.
+        if (std::find(kernels.begin(), kernels.begin() + i, kernels[i]) != kernels.begin() + i)
+            throw std::runtime_error("Duplicate GPU kernel");
+    }
     GpuMeasurements metadata;
     int device = 0;
     check(cudaGetDevice(&device), "cudaGetDevice");
@@ -64,10 +69,15 @@ std::vector<GpuMeasurements> measure_gpu(const Grid3D& initial, const Grid3D& cp
     const size_t columns = static_cast<size_t>(initial.nx - 2) * (initial.ny - 2);
     const size_t cells = columns * (initial.nz - 2);
     constexpr unsigned int threads = 256;
-    const size_t blocks = (cells + threads - 1) / threads;
-    const size_t column_blocks = (columns + threads - 1) / threads;
+    auto work_items = [&](GpuKernel kernel) -> size_t {
+        if (kernel == GpuKernel::Naive) return cells;
+        if (kernel == GpuKernel::ZRegister) return columns;
+        const size_t bound = static_cast<size_t>(z_cells_per_thread(kernel, initial.nz));
+        const size_t chunks = 1 + (static_cast<size_t>(initial.nz - 2) - 1) / bound;
+        return columns * chunks;
+    };
     for (auto kernel : kernels) {
-        const size_t count = kernel == GpuKernel::Naive ? blocks : column_blocks;
+        const size_t count = (work_items(kernel) + threads - 1) / threads;
         if (count > static_cast<size_t>(properties.maxGridSize[0]))
             throw std::runtime_error("Grid exceeds CUDA launch limit");
     }
@@ -90,13 +100,29 @@ std::vector<GpuMeasurements> measure_gpu(const Grid3D& initial, const Grid3D& cp
         }
     };
     auto advance = [&](int steps, GpuKernel kernel) {
+        const size_t items = work_items(kernel);
+        const auto blocks = static_cast<unsigned int>((items + threads - 1) / threads);
         for (int step = 0; step < steps; ++step) {
-            if (kernel == GpuKernel::Naive) {
-                diffusion<<<static_cast<unsigned int>(blocks), threads>>>(
-                    current, next, initial.nx, initial.ny, cells, cx, cy, cz);
-            } else {
-                diffusion_z_register<<<static_cast<unsigned int>(column_blocks), threads>>>(
-                    current, next, initial.nx, initial.ny, initial.nz, columns, cx, cy, cz);
+            switch (kernel) {
+                case GpuKernel::Naive:
+                    diffusion<<<blocks, threads>>>(current, next, initial.nx, initial.ny, cells, cx, cy, cz);
+                    break;
+                case GpuKernel::ZRegister:
+                    diffusion_z_register<<<blocks, threads>>>(
+                        current, next, initial.nx, initial.ny, initial.nz, columns, cx, cy, cz);
+                    break;
+                case GpuKernel::Z2:
+                    diffusion_z_bounded<2><<<blocks, threads>>>(
+                        current, next, initial.nx, initial.ny, initial.nz, columns, items, cx, cy, cz);
+                    break;
+                case GpuKernel::Z4:
+                    diffusion_z_bounded<4><<<blocks, threads>>>(
+                        current, next, initial.nx, initial.ny, initial.nz, columns, items, cx, cy, cz);
+                    break;
+                case GpuKernel::Z8:
+                    diffusion_z_bounded<8><<<blocks, threads>>>(
+                        current, next, initial.nx, initial.ny, initial.nz, columns, items, cx, cy, cz);
+                    break;
             }
             check(cudaGetLastError(), "diffusion launch");
             std::swap(current, next);

@@ -140,3 +140,6 @@ References: [NERSC CUDA modules](https://docs.nersc.gov/development/programming-
 [CUDA event timing](https://developer.nvidia.com/blog/how-implement-performance-metrics-cuda-cc/).
 
 For a separate short Nsight Systems capture, see [Phase 4 profiling](gpu_profiling.md).
+
+For the opt-in one-H2D-plus-D2D initialization comparison, see
+[Phase 6A](transfer_initialization.md). The default remains the two-H2D baseline.

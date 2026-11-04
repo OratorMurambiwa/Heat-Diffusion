@@ -58,7 +58,7 @@ int main(int argc, char** argv) {
             if (option == "--help") {
                 std::cout << "Usage: cpu_cuda_benchmark [--threads N --iterations N --warmup N --repeats N]\n"
                           << " [--csv PATH] [--size N] [--cpu-only] [--gpu-init baseline|d2d|both]\n"
-                          << " [--gpu-kernel naive|z-register|both]\n"
+                          << " [--gpu-kernel naive|z-register|z2|z4|z8|both|bounded|all]\n"
                           << "Default sweep: 64^3, 128^3, 256^3; FP64; 100 iterations, 10 warmups, 9 repeats.\n"
                           << "--size overrides the sweep. CSV is overwritten. --cpu-only produces no GPU results.\n"
                           << "Default: naive kernel, baseline (two H2D copies); multiple variants alternate order each repeat.\n";
@@ -85,8 +85,13 @@ int main(int argc, char** argv) {
                 const std::string kernel(value);
                 if (kernel == "naive") kernels = {GpuKernel::Naive};
                 else if (kernel == "z-register") kernels = {GpuKernel::ZRegister};
+                else if (kernel == "z2") kernels = {GpuKernel::Z2};
+                else if (kernel == "z4") kernels = {GpuKernel::Z4};
+                else if (kernel == "z8") kernels = {GpuKernel::Z8};
                 else if (kernel == "both") kernels = {GpuKernel::Naive, GpuKernel::ZRegister};
-                else throw std::runtime_error("--gpu-kernel must be naive, z-register, or both");
+                else if (kernel == "bounded") kernels = {GpuKernel::Naive, GpuKernel::Z2, GpuKernel::Z4, GpuKernel::Z8};
+                else if (kernel == "all") kernels = {GpuKernel::Naive, GpuKernel::ZRegister, GpuKernel::Z2, GpuKernel::Z4, GpuKernel::Z8};
+                else throw std::runtime_error("--gpu-kernel must be naive, z-register, z2, z4, z8, both, bounded, or all");
             }
             else throw std::runtime_error("Unknown option: " + option);
         }
@@ -199,7 +204,7 @@ int main(int argc, char** argv) {
                     number(transfer_inclusive && !baseline ? field_bytes : 0.0),
                     number(transfer_inclusive ? field_bytes : 0.0),
                     measurement ? kernel_name(measurement->kernel) : "not_applicable",
-                    measurement ? std::to_string(measurement->kernel == GpuKernel::ZRegister ? n - 2 : 1) : "",
+                    measurement ? std::to_string(z_cells_per_thread(measurement->kernel, n)) : "",
                     naive_time > 0.0 ? number(naive_time/statistics.median) : "",
                     naive_time > 0.0 ? number(100.0*(1.0-statistics.median/naive_time)) : ""};
                 csv_row(csv, fields);

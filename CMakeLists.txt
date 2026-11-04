@@ -114,6 +114,16 @@ if(ENABLE_CUDA)
         set_target_properties(cuda_register_validation PROPERTIES CUDA_STANDARD 17 CUDA_STANDARD_REQUIRED ON)
         add_test(NAME cuda_register_validation COMMAND cuda_register_validation)
         set_tests_properties(cuda_register_validation PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" LABELS "cuda")
+
+        add_executable(cuda_bounded_validation
+            tests/cuda_bounded_validation.cpp benchmarks/cuda_timing.cu
+            src/grid3d.cpp src/solver.cpp)
+        target_include_directories(cuda_bounded_validation PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks" "${CMAKE_CURRENT_SOURCE_DIR}/src")
+        target_link_libraries(cuda_bounded_validation PRIVATE OpenMP::OpenMP_CXX)
+        set_target_properties(cuda_bounded_validation PROPERTIES CUDA_STANDARD 17 CUDA_STANDARD_REQUIRED ON)
+        add_test(NAME cuda_bounded_validation COMMAND cuda_bounded_validation)
+        set_tests_properties(cuda_bounded_validation PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" LABELS "cuda")
     endif()
 endif()
 

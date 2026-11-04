@@ -2,12 +2,31 @@
 #include "grid3d.hpp"
 #include <string>
 #include <vector>
+#include <stdexcept>
 
 enum class GpuInitialization { TwoHostCopies, HostThenDeviceCopy };
-enum class GpuKernel { Naive, ZRegister };
+enum class GpuKernel { Naive, ZRegister, Z2, Z4, Z8 };
 
 inline const char* kernel_name(GpuKernel kernel) {
-    return kernel == GpuKernel::Naive ? "naive" : "z_register";
+    switch (kernel) {
+        case GpuKernel::Naive: return "naive";
+        case GpuKernel::ZRegister: return "z_register";
+        case GpuKernel::Z2: return "z_bounded_2";
+        case GpuKernel::Z4: return "z_bounded_4";
+        case GpuKernel::Z8: return "z_bounded_8";
+    }
+    throw std::invalid_argument("Unknown GPU kernel");
+}
+
+inline int z_cells_per_thread(GpuKernel kernel, int nz) {
+    switch (kernel) {
+        case GpuKernel::Naive: return 1;
+        case GpuKernel::ZRegister: return nz - 2;
+        case GpuKernel::Z2: return 2;
+        case GpuKernel::Z4: return 4;
+        case GpuKernel::Z8: return 8;
+    }
+    throw std::invalid_argument("Unknown GPU kernel");
 }
 
 inline const char* initialization_name(GpuInitialization mode) {
